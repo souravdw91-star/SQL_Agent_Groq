@@ -1,49 +1,68 @@
 import streamlit as st
-from src.agent.builder import build_sql_agent
-from src.utils.parser import extract_clean_text
+from backend.app import SQLAgentBackend
 
-st.set_page_config(page_title="MySQL Gemini Agent", page_icon="🗄️", layout="wide")
+st.set_page_config(page_title="Qwen SQL Agent", page_icon="⚡", layout="wide")
+st.title("⚡ Natural Language SQL Agent")
+st.caption("Powered by Groq (Qwen) + LangChain + Redis Caching + LangSmith Tracing")
 
-st.title("🗄️ MySQL Database Agent")
-st.caption("Powered by Google Gemini, LangChain, and LangSmith Tracing")
+@st.cache_resource(show_spinner="Initializing Database and Agent...")
+def load_backend():
+    return SQLAgentBackend()
 
-# Initialize Agent once in session state
-if "agent" not in st.session_state:
+try:
+    backend = load_backend()
+except Exception as e:
+    st.error(f"Failed to initialize backend. Please check your MySQL, Redis, and Groq settings. Details: {e}")
+    st.stop()
+
+# Sidebar diagnostics
+with st.sidebar:
+    st.subheader("System Status")
     try:
-        with st.spinner("Connecting to MySQL and building agent..."):
-            st.session_state.agent = build_sql_agent()
-    except Exception as e:
-        st.error(f"Failed to initialize agent: {e}")
-        st.stop()
+        backend.redis_client.ping()
+        st.success("Redis Cache: Connected")
+    except Exception:
+        st.warning("Redis Cache: Offline (Operating without cache)")
+    
+    st.info(f"Target DB: `{backend.db._engine.url.database}`")
+    
+    if st.button("Clear Response Cache"):
+        keys = backend.redis_client.keys("query_cache:*")
+        if keys:
+            backend.redis_client.delete(*keys)
+            st.success(f"Cleared {len(keys)} cached entries.")
+        else:
+            st.info("No query cache to clear.")
 
-# Initialize message history
+# Chat history initialization
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! Ask me any question about the database."}
-    ]
+    st.session_state.messages = []
 
-# Render chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if "meta" in msg:
+            st.caption(msg["meta"])
 
-# Process new user prompt
-if prompt := st.chat_input("e.g., Which 5 customers placed the most orders last month?"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+user_input = st.chat_input("Ask a question about your database (e.g., 'Show total sales by user')...")
+
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Querying database..."):
-            try:
-                # Execution with LangSmith auto-tracing
-                response = st.session_state.agent.invoke({"input": prompt})
-                output_text = extract_clean_text(response.get("output", "No result returned."))
-                st.markdown(output_text)
-                
-                # Append to chat history
-                st.session_state.messages.append({"role": "assistant", "content": output_text})
-            except Exception as e:
-                error_msg = f"⚠️ Error executing query: `{e}`"
-                st.markdown(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        with st.spinner("Processing schema and executing query..."):
+            res = backend.query(user_input)
+            response_text = res["result"]
+            source = res["source"]
+
+            st.markdown(response_text)
+            meta_label = "⚡ Served from Redis Cache" if source == "redis_cache" else "🤖 Generated via Groq Qwen Agent"
+            st.caption(meta_label)
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response_text,
+                "meta": meta_label
+            })
