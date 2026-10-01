@@ -41,7 +41,7 @@ class SQLAgentBackend:
         self._ensure_schema_cached()
 
         # 4. Initialize Groq LLM (Qwen)
-        model_name = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+        model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         self.llm = ChatGroq(
             model=model_name,
             temperature=0,

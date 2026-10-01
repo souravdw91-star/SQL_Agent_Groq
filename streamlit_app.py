@@ -1,9 +1,9 @@
 import streamlit as st
 from backend.app import SQLAgentBackend
 
-st.set_page_config(page_title="Qwen SQL Agent", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Groq Cloud API SQL Agent", page_icon="⚡", layout="wide")
 st.title("⚡ Natural Language SQL Agent")
-st.caption("Powered by Groq (Qwen) + LangChain + Redis Caching + LangSmith Tracing")
+st.caption("Powered by Groq Cloud API + LangChain + Redis Caching + LangSmith Tracing")
 
 @st.cache_resource(show_spinner="Initializing Database and Agent...")
 def load_backend():
@@ -58,7 +58,7 @@ if user_input:
             source = res["source"]
 
             st.markdown(response_text)
-            meta_label = "⚡ Served from Redis Cache" if source == "redis_cache" else "🤖 Generated via Groq Qwen Agent"
+            meta_label = "⚡ Served from Redis Cache" if source == "redis_cache" else "🤖 Generated via Groq Cloud API Agent"
             st.caption(meta_label)
 
             st.session_state.messages.append({
